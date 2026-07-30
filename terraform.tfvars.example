@@ -1,0 +1,3 @@
+project_name = "meuprojeto"
+region       = "us-east-1"
+environment  = "dev"
