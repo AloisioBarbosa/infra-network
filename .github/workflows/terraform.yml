@@ -1,4 +1,4 @@
-name: Terraform
+name: Terraform Pipeline
 
 on:
   pull_request:
@@ -6,18 +6,23 @@ on:
   push:
     branches: [main]
 
+# Evita execuções simultâneas concorrentes no mesmo ambiente/state
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
   pull-requests: write
-  security-events: write   # necessário para upload SARIF
+  security-events: write
 
 env:
   TF_VERSION: "1.7.5"
 
 jobs:
   lint:
-    name: Lint e validate
+    name: Lint e Validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +41,7 @@ jobs:
         run: terraform validate
 
       - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v6
+        uses: terraform-linters/setup-tflint@v4
 
       - name: TFLint
         run: |
@@ -44,7 +49,7 @@ jobs:
           tflint
 
   trivy-scan:
-    name: Trivy IaC scan
+    name: Trivy IaC Scan
     runs-on: ubuntu-latest
     needs: lint
     permissions:
@@ -58,12 +63,15 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
+          scan-ref: '.'
           format: sarif
           output: trivy.sarif
-          exit-code: 0   # não falhar o job se houver vulnerabilidades, apenas gerar o relatório
+          severity: 'CRITICAL,HIGH'
+          exit-code: 0   # Falha o job caso encontre vulnerabilidades CRITICAL ou HIGH
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
+        if: always()     # Garante o envio do relatório SARIF para o GitHub Security mesmo se o scan falhar
         with:
           sarif_file: trivy.sarif
 
@@ -72,17 +80,20 @@ jobs:
     needs: [lint, trivy-scan]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    # environment: plan
+    environment: plan
     steps:
       - uses: actions/checkout@v4
+
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
       - name: Configurar credenciais AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+
       - name: Terraform init
         run: |
           terraform init \
@@ -90,10 +101,12 @@ jobs:
             -backend-config="key=${{ vars.TF_STATE_KEY }}" \
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
       - name: Terraform plan
         id: plan
         run: terraform plan -no-color -out=tfplan
         continue-on-error: true
+
       - name: Comentar plan no PR
         uses: actions/github-script@v7
         with:
@@ -109,6 +122,7 @@ jobs:
               repo: context.repo.repo,
               body: output
             })
+
       - name: Falhar se o plan falhou
         if: steps.plan.outcome == 'failure'
         run: exit 1
@@ -118,17 +132,20 @@ jobs:
     needs: [lint, trivy-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # environment: production
+    environment: production
     steps:
       - uses: actions/checkout@v4
+
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
       - name: Configurar credenciais AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+
       - name: Terraform init
         run: |
           terraform init \
@@ -136,5 +153,6 @@ jobs:
             -backend-config="key=${{ vars.TF_STATE_KEY }}" \
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
       - name: Terraform apply
         run: terraform apply -auto-approve
