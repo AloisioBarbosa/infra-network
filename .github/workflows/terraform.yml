@@ -55,12 +55,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Trivy on Terraform code
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           format: sarif
           output: trivy.sarif
-          exit-code: 0   # garante que não falhe o job, apenas alerta
+          exit-code: 1   # falha o job se vulnerabilidades forem encontradas
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3

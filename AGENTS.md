@@ -100,8 +100,9 @@ Repository  = "infra-network"
 
 ## CI/CD
 
-`.github/workflows/terraform.yml` com 3 jobs: `lint` (fmt/validate/tflint/
-tfsec, roda em toda PR) → `plan` (comenta o plan na PR, environment `plan`)
+`.github/workflows/terraform.yml` com 4 jobs: `lint` (fmt/validate/tflint,
+roda em toda PR) → `trivy-scan` (scan de segurança com Trivy, SARIF)
+→ `plan` (comenta o plan na PR, environment `plan`)
 → `apply` (roda no merge em `main`, atrás de aprovação manual via
 environment `production`).
 
@@ -127,4 +128,4 @@ histórico de PRs deste repositório.
   separado, ainda não criado)
 - Separação por ambiente
 - IAM role de OIDC configurada
-- Testes automatizados além de `terraform validate`/`tflint`/`tfsec`
+- Testes automatizados além de `terraform validate`/`tflint`/`trivy`
