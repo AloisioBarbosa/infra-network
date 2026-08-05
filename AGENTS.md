@@ -100,21 +100,41 @@ Repository  = "infra-network"
 
 ## CI/CD
 
-`.github/workflows/terraform.yml` com 4 jobs: `lint` (fmt/validate/tflint,
-roda em toda PR) → `trivy-scan` (scan de segurança com Trivy, SARIF)
-→ `plan` (comenta o plan na PR, environment `plan`)
-→ `apply` (roda no merge em `main`, atrás de aprovação manual via
-environment `production`).
+O workflow se chama **"Terraform Pipeline"** (não "Terraform" — o `name:`
+foi renomeado em edição direta em `main`), em
+`.github/workflows/terraform.yml`, com 4 jobs: `lint` (fmt/validate/tflint,
+job renomeado "Lint e Validate") → `trivy-scan` ("Trivy IaC Scan": scan de
+segurança com Trivy, `scan-type: config`, gera SARIF) → `plan` (comenta o
+plan na PR, environment `plan`) → `apply` (roda no push em `main`, atrás do
+environment `production`). Tem também um bloco `concurrency` pra evitar
+execuções simultâneas no mesmo state.
 
-**Status real: o pipeline ainda não está funcional.** Faltam configurar
-manualmente (ver `CI-SETUP.md`):
-- Secret `AWS_ROLE_ARN` (role de OIDC — ainda não existe)
-- Variables `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`, `TF_LOCK_TABLE`
-- Environments `plan` e `production` no GitHub (o token usado para automação
-  não tinha permissão de admin para criá-los via API)
+O job `trivy-scan` está com `exit-code: 0` **de propósito** — decisão
+tomada em `main` (commit "não falhar o job se houver vulnerabilidades,
+apenas gerar o relatório"): o scan nunca bloqueia o pipeline, só alimenta a
+aba Security > Code scanning. Não confunda isso com um bug esquecido.
 
-Não assuma que o apply automático está ativo até esses itens serem
-confirmados.
+**Status real verificado (última checagem: 04/08/2026):**
+- ✅ Variables `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`,
+  `TF_LOCK_TABLE` — configuradas e corretas
+- ✅ Environments `plan` e `production` — existem
+- ⚠️ Environment `production` **sem required reviewer configurado** — a
+  aprovação manual antes do apply, que era o objetivo original, não está
+  ativa ainda
+- ⚠️ Sobrou um environment `AWS_REGION` (criado por engano numa tentativa
+  anterior) — não é usado por nenhum job, pode ser apagado
+- ❌ Secret `AWS_ROLE_ARN` — o job `apply` falha no step "Configurar
+  credenciais AWS via OIDC" (execução #29, `main`), o que indica que a
+  IAM Role de OIDC ainda não existe ou o secret não foi criado
+
+Não assuma que o apply automático com aprovação manual está funcionando —
+hoje ele falha antes de chegar no `terraform apply`.
+
+**Importante sobre o fluxo de trabalho real**: várias mudanças recentes
+neste workflow foram commitadas **direto em `main`**, sem passar por PR
+(ver histórico de commits do arquivo). Isso quebra a prática de branch
+protection que foi combinada — não assuma que toda mudança em `main` passou
+por revisão.
 
 ## Licença
 
