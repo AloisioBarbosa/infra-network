@@ -92,6 +92,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActionsTerraformSession
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Terraform init
@@ -109,13 +110,29 @@ jobs:
 
       - name: Comentar plan no PR
         uses: actions/github-script@v7
+        env:
+          PLAN_OUTPUT: ${{ steps.plan.outputs.stdout }}
         with:
           script: |
+            // Captura a saída de forma segura
+            let plan = process.env.PLAN_OUTPUT;
+            
+            // Trunca se for maior que 65000 caracteres (limite da API do GitHub é ~65536)
+            if (plan.length > 65000) {
+              plan = plan.substring(0, 65000) + "\n\n... [Output truncado devido ao limite de caracteres do GitHub]";
+            }
+
+            // Monta o comentário com um bloco retrátil (details) para não poluir o PR
             const output = `#### Terraform Plan 📖
+            <details><summary>Clique para expandir o plano de execução</summary>
+            
+            \`\`\`hcl
+            ${plan}
             \`\`\`
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
+            
+            </details>
             `;
+            
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
