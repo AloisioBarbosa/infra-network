@@ -22,7 +22,7 @@ Este repo **não** cria cluster, nem nada de Kubernetes. Escopo é só rede.
 |---|---|
 | `versions.tf` | `required_version` e `required_providers` |
 | `providers.tf` | provider `aws` com `default_tags` |
-| `backend.tf` | bloco `backend "s3" {}` **vazio** — precisa de `-backend-config` no `terraform init` |
+| `backend.tf` | bloco `backend "s3"` com configuração do bucket S3, chave, região e lock via `use_lockfile` |
 | `variables.tf` | `project_name`, `region`, `environment` |
 | `vpc.tf` | `aws_vpc.main` — CIDR fixo `10.0.0.0/16` |
 | `public_subnets.tf` | 3 subnets públicas (1a/1b/1c) + route table + IGW route |
@@ -109,7 +109,7 @@ environment `production`).
 **Status real: o pipeline ainda não está funcional.** Faltam configurar
 manualmente (ver `CI-SETUP.md`):
 - Secret `AWS_ROLE_ARN` (role de OIDC — ainda não existe)
-- Variables `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`, `TF_LOCK_TABLE`
+- Variables `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`
 - Environments `plan` e `production` no GitHub (o token usado para automação
   não tinha permissão de admin para criá-los via API)
 

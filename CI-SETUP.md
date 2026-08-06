@@ -17,7 +17,10 @@ adicione o ARN como secret:
 - `AWS_REGION`
 - `TF_STATE_BUCKET`
 - `TF_STATE_KEY` (ex: `infra-network/terraform.tfstate`)
-- `TF_LOCK_TABLE`
+
+## 2.1. Nota sobre o lock do state
+
+Com `use_lockfile = true`, o lock é armazenado como um arquivo no próprio bucket S3 ao lado do state file, eliminando a necessidade do DynamoDB. O comando `terraform init -reconfigure` é necessário na CI para forçar a reconfiguração do backend e pegar essa mudança, já que o `hashicorp/setup-terraform` faz cache do diretório `.terraform/` entre runs.
 
 ## 3. Environments do GitHub (aprovação manual antes do apply)
 
