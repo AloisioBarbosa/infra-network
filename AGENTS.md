@@ -54,17 +54,24 @@ Nenhuma outra variável existe neste repositório.
 Este é o contrato real que `infra-cluster` (e qualquer outro repo) deve
 consumir. O prefixo é sempre `var.project_name`:
 
+**Valor real em uso, definido via GitHub Actions variable
+`TF_VAR_project_name`: `infra-network`.** O `infra-cluster` PRECISA usar
+exatamente o mesmo valor (`TF_VAR_project_name = infra-network` também,
+configurado nele) — não o nome do próprio repositório dele. Se os dois
+repos usarem `project_name` diferentes, os paths do SSM abaixo não batem
+e o `infra-cluster` falha tentando ler um parâmetro inexistente.
+
 ```
-/{project_name}/vpc/vpc_id
-/{project_name}/vpc/subnet_private_1a
-/{project_name}/vpc/subnet_private_1b
-/{project_name}/vpc/subnet_private_1c
-/{project_name}/vpc/subnet_public_1a
-/{project_name}/vpc/subnet_public_1b
-/{project_name}/vpc/subnet_public_1c
-/{project_name}/vpc/subnet_databases_1a
-/{project_name}/vpc/subnet_databases_1b
-/{project_name}/vpc/subnet_databases_1c
+/infra-network/vpc/vpc_id
+/infra-network/vpc/subnet_private_1a
+/infra-network/vpc/subnet_private_1b
+/infra-network/vpc/subnet_private_1c
+/infra-network/vpc/subnet_public_1a
+/infra-network/vpc/subnet_public_1b
+/infra-network/vpc/subnet_public_1c
+/infra-network/vpc/subnet_databases_1a
+/infra-network/vpc/subnet_databases_1b
+/infra-network/vpc/subnet_databases_1c
 ```
 
 Todos são `String`, valor = o ID do recurso (`vpc-xxxx`, `subnet-xxxx`). Não
@@ -123,12 +130,29 @@ aba Security > Code scanning. Não confunda isso com um bug esquecido.
   ativa ainda
 - ⚠️ Sobrou um environment `AWS_REGION` (criado por engano numa tentativa
   anterior) — não é usado por nenhum job, pode ser apagado
-- ❌ Secret `AWS_ROLE_ARN` — o job `apply` falha no step "Configurar
-  credenciais AWS via OIDC" (execução #29, `main`), o que indica que a
-  IAM Role de OIDC ainda não existe ou o secret não foi criado
+- **Autenticação AWS mudou de OIDC para chaves estáticas.** Depois de
+  erros persistentes com `role-to-assume`, o workflow passou a usar
+  `aws-access-key-id`/`aws-secret-access-key` (secrets `AWS_ACCESS_KEY_ID`
+  e `AWS_SECRET_ACCESS_KEY`). O bloco `role-to-assume` original ficou
+  comentado no arquivo, não removido. Se for investigar o CI, confira
+  qual dos dois métodos está de fato ativo antes de assumir.
+- ❌ A policy anexada a essa identidade (IAM user, com as chaves
+  estáticas) cobre EC2/EKS/IAM/SSM/KMS mas **não cobre o backend do
+  Terraform** (bucket S3 do state + tabela do DynamoDB do lock) — causou
+  um 403 no `terraform init` (`HeadObject` em `orange-ks8-logs`). Precisa
+  de `s3:GetObject`/`PutObject`/`DeleteObject` no bucket, `s3:ListBucket`
+  no bucket (sem isso a AWS devolve 403 em vez de 404 mesmo pra objeto
+  inexistente), e `dynamodb:GetItem`/`PutItem`/`DeleteItem` na tabela de
+  lock. Confirme se essa policy já foi anexada antes de assumir que o
+  backend funciona.
+- ❌ Variáveis `TF_VAR_project_name`, `TF_VAR_region`, `TF_VAR_environment`
+  — valores decididos (`infra-network`, `us-east-1`, `dev`), mas ainda
+  não confirmamos via API se já foram criadas como repository variables
+  (o token não tem permissão de leitura em Variables)
 
-Não assuma que o apply automático com aprovação manual está funcionando —
-hoje ele falha antes de chegar no `terraform apply`.
+Não assuma que o pipeline completo (lint → security → plan/apply) já
+roda de ponta a ponta com sucesso — confirme o histórico de execuções
+antes de assumir qualquer etapa como resolvida.
 
 **Importante sobre o fluxo de trabalho real**: várias mudanças recentes
 neste workflow foram commitadas **direto em `main`**, sem passar por PR
