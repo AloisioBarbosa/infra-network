@@ -121,9 +121,9 @@ tomada em `main` (commit "não falhar o job se houver vulnerabilidades,
 apenas gerar o relatório"): o scan nunca bloqueia o pipeline, só alimenta a
 aba Security > Code scanning. Não confunda isso com um bug esquecido.
 
-**Status real verificado (última checagem: 04/08/2026):**
-- ✅ Variables `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`,
-  `TF_LOCK_TABLE` — configuradas e corretas
+**Status real verificado (última checagem: 06/08/2026):**
+- ✅ Variables `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY` — configuradas e corretas
+- ❌ `TF_LOCK_TABLE` removido — o lock agora usa `use_lockfile` no S3, não DynamoDB
 - ✅ Environments `plan` e `production` — existem
 - ⚠️ Environment `production` **sem required reviewer configurado** — a
   aprovação manual antes do apply, que era o objetivo original, não está
@@ -138,13 +138,14 @@ aba Security > Code scanning. Não confunda isso com um bug esquecido.
   qual dos dois métodos está de fato ativo antes de assumir.
 - ❌ A policy anexada a essa identidade (IAM user, com as chaves
   estáticas) cobre EC2/EKS/IAM/SSM/KMS mas **não cobre o backend do
-  Terraform** (bucket S3 do state + tabela do DynamoDB do lock) — causou
-  um 403 no `terraform init` (`HeadObject` em `orange-ks8-logs`). Precisa
-  de `s3:GetObject`/`PutObject`/`DeleteObject` no bucket, `s3:ListBucket`
-  no bucket (sem isso a AWS devolve 403 em vez de 404 mesmo pra objeto
-  inexistente), e `dynamodb:GetItem`/`PutItem`/`DeleteItem` na tabela de
-  lock. Confirme se essa policy já foi anexada antes de assumir que o
-  backend funciona.
+  Terraform** (bucket S3 do state) — causou um 403 no `terraform init`
+  (`HeadObject` em `orange-ks8-logs`). Precisa de `s3:GetObject`/`PutObject`/`DeleteObject`
+  no bucket e `s3:ListBucket` no bucket (sem isso a AWS devolve 403 em vez
+  de 404 mesmo pra objeto inexistente). Com `use_lockfile = true`, o lock
+  fica no próprio S3 junto ao state file — não precisa mais de DynamoDB.
+- ❌ Permissão `apigateway:UPDATE` no resource `/account` — necessária
+  para o `aws_api_gateway_account.main`. Sem isso o apply falha com
+  `AccessDeniedException`.
 - ❌ Variáveis `TF_VAR_project_name`, `TF_VAR_region`, `TF_VAR_environment`
   — valores decididos (`infra-network`, `us-east-1`, `dev`), mas ainda
   não confirmamos via API se já foram criadas como repository variables

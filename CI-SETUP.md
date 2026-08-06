@@ -50,12 +50,27 @@ Statements que faltam adicionar à policy:
 
 Confirme se isso já foi anexado antes de assumir que o backend funciona.
 
-## 3. Variáveis do backend do Terraform — ✅ feito
+## 3. Permissão para API Gateway Account — ❌ necessária
 
-`AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`, `TF_LOCK_TABLE` —
-configuradas como repository variables.
+O recurso `aws_api_gateway_account` em `api_gateway_setup.tf` requer que o IAM user do Terraform tenha `apigateway:UPDATE` no resource `/account`:
 
-## 4. Environments do GitHub — ⚠️ parcialmente feito
+```json
+{
+  "Sid": "ApiGatewayAccount",
+  "Effect": "Allow",
+  "Action": "apigateway:UPDATE",
+  "Resource": "arn:aws:apigateway:us-east-1::/account"
+}
+```
+
+Sem isso o apply falha com `AccessDeniedException` no `aws_api_gateway_account.main`.
+
+## 4. Variáveis do backend do Terraform — ✅ feito
+
+`AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY` —
+configuradas como repository variables. (Nota: `TF_LOCK_TABLE` foi removido — o lock agora usa `use_lockfile` no S3.)
+
+## 5. Environments do GitHub — ⚠️ parcialmente feito
 
 - `plan` — existe
 - `production` — existe, **mas sem required reviewer configurado ainda**.
@@ -63,7 +78,7 @@ configuradas como repository variables.
 - Sobrou um environment `AWS_REGION` (engano de uma tentativa anterior) —
   não é usado por nenhum job, pode apagar
 
-## 5. Variáveis de aplicação do Terraform — ⚠️ decidido, confirmar criação
+## 6. Variáveis de aplicação do Terraform — ⚠️ decidido, confirmar criação
 
 Valores decididos para este repositório:
 
