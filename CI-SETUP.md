@@ -1,56 +1,84 @@
 # Configuração necessária para o CI/CD funcionar
 
-Status verificado em 04/08/2026, direto na conta GitHub (API), não por
-suposição. Atualize este arquivo sempre que resolver um item.
+Status verificado em 04/08/2026. Atualize este arquivo sempre que resolver
+um item — ele é a fonte da verdade sobre o que falta, não o workflow em si.
 
-## 1. Role de OIDC na AWS — ❌ pendente
+## 1. Autenticação AWS — ⚠️ mudou de OIDC para chaves estáticas
 
-O job `apply` falha no step "Configurar credenciais AWS via OIDC"
-(confirmado na execução #29 em `main`). Isso indica que a IAM Role ainda
-não existe, ou o secret abaixo não foi criado, ou a trust policy da role
-não está apontando pro repositório certo.
+Depois de erros persistentes com `role-to-assume` (OIDC), o workflow passou
+a usar `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (secrets). O bloco
+`role-to-assume` original ficou **comentado** no `terraform.yml`, não
+removido — se for debugar, confirme qual dos dois métodos está de fato
+ativo antes de mexer.
 
-Crie uma IAM Role com trust policy para o GitHub OIDC provider
-(`token.actions.githubusercontent.com`), restrita a este repositório, e
-adicione o ARN como secret:
+Trade-off que vale registrar: chaves estáticas não expiram sozinhas e
+ficam nos secrets do GitHub indefinidamente — diferente do OIDC, que emite
+credenciais de minutos por execução. Funcional, mas é uma troca de
+segurança consciente, não neutra.
 
-- Secret: `AWS_ROLE_ARN`
+## 2. Permissões da identidade AWS — ⚠️ incompleta
 
-Não temos como confirmar via API se o secret existe (o token usado só tem
-permissão de leitura em "Variables", não em "Secrets") — só o comportamento
-do workflow real confirma isso.
+A policy atual cobre EC2 (rede), EKS, IAM (roles do cluster/nodes/api
+gateway), SSM Parameter Store e KMS — mas **não cobre o backend do
+Terraform** (bucket S3 do state + tabela do DynamoDB do lock). Isso já
+causou um erro real: 403 no `terraform init` (`HeadObject` em
+`orange-ks8-logs`), porque sem `s3:ListBucket` a AWS devolve 403 em vez de
+404 mesmo pra um objeto que ainda não existe.
 
-## 2. Variáveis do backend do Terraform — ✅ feito
+Statements que faltam adicionar à policy:
 
-Confirmado configurado corretamente em Settings → Secrets and variables →
-Actions → Variables:
+```json
+{
+  "Sid": "TerraformStateBucket",
+  "Effect": "Allow",
+  "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+  "Resource": "arn:aws:s3:::orange-ks8-logs/*"
+},
+{
+  "Sid": "TerraformStateBucketList",
+  "Effect": "Allow",
+  "Action": "s3:ListBucket",
+  "Resource": "arn:aws:s3:::orange-ks8-logs"
+},
+{
+  "Sid": "TerraformStateLock",
+  "Effect": "Allow",
+  "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"],
+  "Resource": "arn:aws:dynamodb:us-east-1:<AWS_ACCOUNT_ID>:table/terraform-lock-table"
+}
+```
 
-- `AWS_REGION`
-- `TF_STATE_BUCKET`
-- `TF_STATE_KEY`
-- `TF_LOCK_TABLE`
+Confirme se isso já foi anexado antes de assumir que o backend funciona.
 
-## 3. Environments do GitHub — ⚠️ parcialmente feito
+## 3. Variáveis do backend do Terraform — ✅ feito
+
+`AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`, `TF_LOCK_TABLE` —
+configuradas como repository variables.
+
+## 4. Environments do GitHub — ⚠️ parcialmente feito
 
 - `plan` — existe
 - `production` — existe, **mas sem required reviewer configurado ainda**.
-  Adicione você mesmo como required reviewer em Settings → Environments →
-  production, senão o `apply` roda sozinho no merge, sem pausar pra
-  aprovação manual (que era o objetivo original)
-- Sobrou um environment chamado `AWS_REGION`, criado por engano numa
-  tentativa anterior — não é referenciado por nenhum job, pode apagar
+  Sem isso o `apply` roda sozinho no merge, sem pausar pra aprovação manual
+- Sobrou um environment `AWS_REGION` (engano de uma tentativa anterior) —
+  não é usado por nenhum job, pode apagar
 
-## 4. Variáveis de aplicação do Terraform — ❌ pendente
+## 5. Variáveis de aplicação do Terraform — ⚠️ decidido, confirmar criação
 
-Os steps de `terraform plan`/`terraform apply` no workflow **não passam
-nenhuma variável** (`-var`, `-var-file`, nem `TF_VAR_*`). Como
-`project_name`, `region` e `environment` são obrigatórias e sem default,
-isso deve falhar com "No value for required variable" assim que o plan
-rodar de verdade (ainda não vimos esse erro só porque o pipeline está
-parando antes, na autenticação AWS). Resolva isso antes de tentar validar
-o restante:
+Valores decididos para este repositório:
 
-- Opção mais simples: `TF_VAR_project_name`, `TF_VAR_region`,
-  `TF_VAR_environment` como variáveis do environment `plan`/`production`
-  no GitHub, lidas automaticamente pelo Terraform
-- Alternativa: um `terraform.tfvars` versionado no repo (sem segredos)
+| Nome | Valor |
+|---|---|
+| `TF_VAR_project_name` | `infra-network` |
+| `TF_VAR_region` | `us-east-1` |
+| `TF_VAR_environment` | `dev` |
+
+**Importante — contrato entre repositórios**: `project_name` vira o
+prefixo dos paths do SSM que o `infra-cluster` consome. O `infra-cluster`
+precisa usar exatamente `TF_VAR_project_name = infra-network` também — não
+o nome do próprio repositório dele. Ver `AGENTS.md`, seção "Contrato entre
+repositórios", para a lista completa dos paths.
+
+Configure como repository variables (mesmo lugar de `AWS_REGION` etc.), nos
+dois repositórios. Ainda não confirmamos via API se já foram criadas (o
+token usado não tem permissão de leitura em Variables).
