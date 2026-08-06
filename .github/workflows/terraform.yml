@@ -67,7 +67,7 @@ jobs:
           format: sarif
           output: trivy.sarif
           severity: 'CRITICAL,HIGH'
-          exit-code: 0   # Falha o job caso encontre vulnerabilidades CRITICAL ou HIGH
+          exit-code: 0   # Nao falha o job em CRITICAL/HIGH, apenas gera o relatorio SARIF (decisao deliberada)
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3

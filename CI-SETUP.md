@@ -1,40 +1,84 @@
 # Configuração necessária para o CI/CD funcionar
 
-O workflow em `.github/workflows/terraform.yml` depende de itens que precisam
-ser configurados manualmente no GitHub (Settings → Secrets and variables →
-Actions), pois envolvem dados da sua conta AWS que este PR não tem acesso.
+Status verificado em 04/08/2026. Atualize este arquivo sempre que resolver
+um item — ele é a fonte da verdade sobre o que falta, não o workflow em si.
 
-## 1. Role de OIDC na AWS (sem chaves estáticas)
+## 1. Autenticação AWS — ⚠️ mudou de OIDC para chaves estáticas
 
-Crie uma IAM Role com trust policy para o GitHub OIDC provider
-(`token.actions.githubusercontent.com`), restrita a este repositório, e
-adicione o ARN como secret:
+Depois de erros persistentes com `role-to-assume` (OIDC), o workflow passou
+a usar `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (secrets). O bloco
+`role-to-assume` original ficou **comentado** no `terraform.yml`, não
+removido — se for debugar, confirme qual dos dois métodos está de fato
+ativo antes de mexer.
 
-- Secret: `AWS_ROLE_ARN`
+Trade-off que vale registrar: chaves estáticas não expiram sozinhas e
+ficam nos secrets do GitHub indefinidamente — diferente do OIDC, que emite
+credenciais de minutos por execução. Funcional, mas é uma troca de
+segurança consciente, não neutra.
 
-## 2. Variáveis do backend do Terraform (não sensíveis → "Variables", não "Secrets")
+## 2. Permissões da identidade AWS — ⚠️ incompleta
 
-- `AWS_REGION`
-- `TF_STATE_BUCKET`
-- `TF_STATE_KEY` (ex: `infra-network/terraform.tfstate`)
+A policy atual cobre EC2 (rede), EKS, IAM (roles do cluster/nodes/api
+gateway), SSM Parameter Store e KMS — mas **não cobre o backend do
+Terraform** (bucket S3 do state + tabela do DynamoDB do lock). Isso já
+causou um erro real: 403 no `terraform init` (`HeadObject` em
+`orange-ks8-logs`), porque sem `s3:ListBucket` a AWS devolve 403 em vez de
+404 mesmo pra um objeto que ainda não existe.
 
-## 2.1. Nota sobre o lock do state
+Statements que faltam adicionar à policy:
 
-Com `use_lockfile = true`, o lock é armazenado como um arquivo no próprio bucket S3 ao lado do state file, eliminando a necessidade do DynamoDB. O comando `terraform init -reconfigure` é necessário na CI para forçar a reconfiguração do backend e pegar essa mudança, já que o `hashicorp/setup-terraform` faz cache do diretório `.terraform/` entre runs.
+```json
+{
+  "Sid": "TerraformStateBucket",
+  "Effect": "Allow",
+  "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+  "Resource": "arn:aws:s3:::orange-ks8-logs/*"
+},
+{
+  "Sid": "TerraformStateBucketList",
+  "Effect": "Allow",
+  "Action": "s3:ListBucket",
+  "Resource": "arn:aws:s3:::orange-ks8-logs"
+},
+{
+  "Sid": "TerraformStateLock",
+  "Effect": "Allow",
+  "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"],
+  "Resource": "arn:aws:dynamodb:us-east-1:<AWS_ACCOUNT_ID>:table/terraform-lock-table"
+}
+```
 
-## 3. Environments do GitHub (aprovação manual antes do apply)
+Confirme se isso já foi anexado antes de assumir que o backend funciona.
 
-O token usado para automatizar este PR não tem permissão para criar
-Environments via API. Configure manualmente em Settings → Environments:
+## 3. Variáveis do backend do Terraform — ✅ feito
 
-- `plan` — sem restrição, usado só pelo job de plan em PRs
-- `production` — adicione você mesmo como *required reviewer*, para que o
-  job de `apply` fique pausado aguardando aprovação manual antes de rodar
+`AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY`, `TF_LOCK_TABLE` —
+configuradas como repository variables.
 
-## 4. Variáveis de aplicação do Terraform
+## 4. Environments do GitHub — ⚠️ parcialmente feito
 
-As variáveis do próprio módulo (`project_name`, `k8s_version`, etc. — ver
-`terraform.tfvars.example`) ainda precisam ser passadas ao `terraform plan`
-e `terraform apply` no workflow, seja via `-var` explícito, seja via um
-`terraform.tfvars` versionado (sem segredos) ou `TF_VAR_*` nas variáveis
-do ambiente do GitHub.
+- `plan` — existe
+- `production` — existe, **mas sem required reviewer configurado ainda**.
+  Sem isso o `apply` roda sozinho no merge, sem pausar pra aprovação manual
+- Sobrou um environment `AWS_REGION` (engano de uma tentativa anterior) —
+  não é usado por nenhum job, pode apagar
+
+## 5. Variáveis de aplicação do Terraform — ⚠️ decidido, confirmar criação
+
+Valores decididos para este repositório:
+
+| Nome | Valor |
+|---|---|
+| `TF_VAR_project_name` | `infra-network` |
+| `TF_VAR_region` | `us-east-1` |
+| `TF_VAR_environment` | `dev` |
+
+**Importante — contrato entre repositórios**: `project_name` vira o
+prefixo dos paths do SSM que o `infra-cluster` consome. O `infra-cluster`
+precisa usar exatamente `TF_VAR_project_name = infra-network` também — não
+o nome do próprio repositório dele. Ver `AGENTS.md`, seção "Contrato entre
+repositórios", para a lista completa dos paths.
+
+Configure como repository variables (mesmo lugar de `AWS_REGION` etc.), nos
+dois repositórios. Ainda não confirmamos via API se já foram criadas (o
+token usado não tem permissão de leitura em Variables).
