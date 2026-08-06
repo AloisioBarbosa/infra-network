@@ -146,6 +146,13 @@ aba Security > Code scanning. Não confunda isso com um bug esquecido.
 - ❌ Permissão `apigateway:UPDATE` no resource `/account` — necessária
   para o `aws_api_gateway_account.main`. Sem isso o apply falha com
   `AccessDeniedException`.
+- ✅ **Corrigido nesta sessão**: `required_version` em `versions.tf` e
+  `TF_VERSION` no workflow estavam em `1.7.5`/`>= 1.7.0` — versão anterior
+  à existência do `use_lockfile` (introduzido no Terraform 1.10,
+  estabilizado no 1.11). Isso causava
+  `Error: Invalid backend configuration argument` no `terraform init`.
+  Atualizado para `TF_VERSION: "1.15.8"` (última estável confirmada em
+  06/08/2026) e `required_version = ">= 1.11.0"`.
 - ❌ Variáveis `TF_VAR_project_name`, `TF_VAR_region`, `TF_VAR_environment`
   — valores decididos (`infra-network`, `us-east-1`, `dev`), mas ainda
   não confirmamos via API se já foram criadas como repository variables
