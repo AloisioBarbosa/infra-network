@@ -20,10 +20,16 @@ segurança consciente, não neutra.
 
 A policy atual cobre EC2 (rede), EKS, IAM (roles do cluster/nodes/api
 gateway), SSM Parameter Store e KMS — mas **não cobre o backend do
-Terraform** (bucket S3 do state + tabela do DynamoDB do lock). Isso já
-causou um erro real: 403 no `terraform init` (`HeadObject` em
-`orange-ks8-logs`), porque sem `s3:ListBucket` a AWS devolve 403 em vez de
-404 mesmo pra um objeto que ainda não existe.
+Terraform** (bucket S3 do state). Isso já causou um erro real: 403 no
+`terraform init` (`HeadObject` em `orange-ks8-logs`), porque sem
+`s3:ListBucket` a AWS devolve 403 em vez de 404 mesmo pra um objeto que
+ainda não existe.
+
+**Não precisa de permissão de DynamoDB** — o lock migrou pra
+`use_lockfile` (S3 native locking), então o lock file fica no próprio
+bucket do state. Isso também exige `required_version >= 1.11.0` no
+Terraform (já corrigido em `versions.tf` e no `TF_VERSION` do workflow —
+antes estava em `1.7.5`, que não conhece esse argumento de backend).
 
 Statements que faltam adicionar à policy:
 
@@ -39,16 +45,14 @@ Statements que faltam adicionar à policy:
   "Effect": "Allow",
   "Action": "s3:ListBucket",
   "Resource": "arn:aws:s3:::orange-ks8-logs"
-},
-{
-  "Sid": "TerraformStateLock",
-  "Effect": "Allow",
-  "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"],
-  "Resource": "arn:aws:dynamodb:us-east-1:<AWS_ACCOUNT_ID>:table/terraform-lock-table"
 }
 ```
 
 Confirme se isso já foi anexado antes de assumir que o backend funciona.
+Também vale confirmar se o bucket `orange-ks8-logs` tem **versionamento
+habilitado** — é recomendado pela própria HashiCorp para o `use_lockfile`
+funcionar de forma segura (permite recuperar o state em caso de exclusão
+acidental do lock file).
 
 ## 3. Permissão para API Gateway Account — ❌ necessária
 
