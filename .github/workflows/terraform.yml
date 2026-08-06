@@ -111,7 +111,7 @@ jobs:
 
       - name: Terraform plan
         id: plan
-        run: terraform plan -no-color -out=tfplan
+        run: terraform plan -no-color -out=tfplan -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
         continue-on-error: true
 
       - name: Comentar plan no PR
@@ -169,4 +169,4 @@ jobs:
             -backend-config="use_lockfile=true"
 
       - name: Terraform apply
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
