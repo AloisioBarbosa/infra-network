@@ -9,11 +9,12 @@ Manager Parameter Store.
 ## Escopo do produto
 
 Inclui VPC, sub-redes em três zonas de disponibilidade, Internet Gateway, NAT
-Gateway por zona, tabelas de rotas, configuração de logging do API Gateway e
-publicação dos IDs no SSM Parameter Store.
+Gateway por zona, tabelas de rotas e publicação dos IDs no SSM Parameter Store.
 
-Não inclui cluster Kubernetes, workloads, serviços compartilhados de plataforma
-ou observabilidade.
+Não inclui fundação da conta, backend provisionado, IAM, configuração global do
+API Gateway, cluster Kubernetes, workloads, serviços compartilhados de
+plataforma ou observabilidade. Recursos globais pertencem ao
+[`infra-bootstrap`](https://github.com/AloisioBarbosa/infra-bootstrap).
 
 ## Arquitetura
 
@@ -55,7 +56,7 @@ operacionais.
 
 ## Ownership
 
-Owner: time de Cloud Platform. Mudanças em CIDRs, rotas, NAT Gateways, IAM ou no
+Owner: time de Cloud Platform. Mudanças em CIDRs, rotas, NAT Gateways ou no
 contrato SSM exigem revisão técnica e evidência do Terraform plan.
 
 Licença: MIT.

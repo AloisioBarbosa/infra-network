@@ -18,8 +18,7 @@ segurança consciente, não neutra.
 
 ## 2. Permissões da identidade AWS — ⚠️ incompleta
 
-A policy atual cobre EC2 (rede), EKS, IAM (roles do cluster/nodes/api
-gateway), SSM Parameter Store e KMS — mas **não cobre o backend do
+A policy atual cobre EC2 (rede) e SSM Parameter Store, mas **não cobre o backend do
 Terraform** (bucket S3 do state). Isso já causou um erro real: 403 no
 `terraform init` (`HeadObject` em `orange-ks8-logs`), porque sem
 `s3:ListBucket` a AWS devolve 403 em vez de 404 mesmo pra um objeto que
@@ -54,27 +53,16 @@ habilitado** — é recomendado pela própria HashiCorp para o `use_lockfile`
 funcionar de forma segura (permite recuperar o state em caso de exclusão
 acidental do lock file).
 
-## 3. Permissão para API Gateway Account — ❌ necessária
+O `infra-bootstrap` passa a ser responsável pelo bucket S3 e pela role OIDC do
+pipeline. Até que ele seja aplicado e o workflow migre para `role-to-assume`,
+as credenciais estáticas ainda precisam das permissões acima.
 
-O recurso `aws_api_gateway_account` em `api_gateway_setup.tf` requer que o IAM user do Terraform tenha `apigateway:UPDATE` no resource `/account`:
-
-```json
-{
-  "Sid": "ApiGatewayAccount",
-  "Effect": "Allow",
-  "Action": "apigateway:UPDATE",
-  "Resource": "arn:aws:apigateway:us-east-1::/account"
-}
-```
-
-Sem isso o apply falha com `AccessDeniedException` no `aws_api_gateway_account.main`.
-
-## 4. Variáveis do backend do Terraform — ✅ feito
+## 3. Variáveis do backend do Terraform — ✅ feito
 
 `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY` —
 configuradas como repository variables. (Nota: `TF_LOCK_TABLE` foi removido — o lock agora usa `use_lockfile` no S3.)
 
-## 5. Environments do GitHub — ⚠️ parcialmente feito
+## 4. Environments do GitHub — ⚠️ parcialmente feito
 
 - `plan` — existe
 - `production` — existe, **mas sem required reviewer configurado ainda**.
@@ -82,7 +70,7 @@ configuradas como repository variables. (Nota: `TF_LOCK_TABLE` foi removido — 
 - Sobrou um environment `AWS_REGION` (engano de uma tentativa anterior) —
   não é usado por nenhum job, pode apagar
 
-## 6. Variáveis de aplicação do Terraform — ⚠️ decidido, confirmar criação
+## 5. Variáveis de aplicação do Terraform — ⚠️ decidido, confirmar criação
 
 Valores decididos para este repositório:
 
