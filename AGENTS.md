@@ -116,6 +116,12 @@ plan na PR, environment `plan`) → `apply` (roda no push em `main`, atrás do
 environment `production`). Tem também um bloco `concurrency` pra evitar
 execuções simultâneas no mesmo state.
 
+Os eventos `pull_request` e `push` usam filtros de caminho. O pipeline
+automático só é disparado por alterações em `**/*.tf`, `**/*.tfvars` ou no
+próprio `.github/workflows/terraform.yml`; mudanças apenas de documentação ou
+de arquivos não relacionados não executam Terraform. O `workflow_dispatch`
+continua disponível para execução manual de `plan`, `apply` ou `destroy`.
+
 O job `trivy-scan` está com `exit-code: 0` **de propósito** — decisão
 tomada em `main` (commit "não falhar o job se houver vulnerabilidades,
 apenas gerar o relatório"): o scan nunca bloqueia o pipeline, só alimenta a
