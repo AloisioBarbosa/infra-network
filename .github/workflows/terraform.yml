@@ -46,7 +46,7 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Terraform init (sem backend)
-        run: terraform init -backend=false
+        run: terraform init -backend=false -input=false
 
       - name: Terraform validate
         run: terraform validate
@@ -108,7 +108,7 @@ jobs:
 
       - name: Terraform init
         run: |
-          terraform init -reconfigure \
+          terraform init -input=false -reconfigure \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="key=${{ vars.TF_STATE_KEY }}" \
             -backend-config="region=${{ vars.AWS_REGION }}" \
@@ -116,7 +116,7 @@ jobs:
 
       - name: Terraform plan
         id: plan
-        run: terraform plan -no-color -out=tfplan -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
+        run: terraform plan -input=false -no-color -out=tfplan -var="project_name=${{ vars.TF_VAR_PROJECT_NAME }}" -var="region=${{ vars.TF_VAR_REGION }}" -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
         continue-on-error: true
 
       - name: Comentar plan no PR
@@ -162,14 +162,14 @@ jobs:
 
       - name: Terraform init
         run: |
-          terraform init -reconfigure \
+          terraform init -input=false -reconfigure \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="key=${{ vars.TF_STATE_KEY }}" \
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -backend-config="use_lockfile=true"
 
       - name: Terraform apply
-        run: terraform apply -auto-approve -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
+        run: terraform apply -input=false -auto-approve -var="project_name=${{ vars.TF_VAR_PROJECT_NAME }}" -var="region=${{ vars.TF_VAR_REGION }}" -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
 
   destroy:
     name: Destroy Infrastructure
@@ -193,11 +193,11 @@ jobs:
 
       - name: Terraform init
         run: |
-          terraform init -reconfigure \
+          terraform init -input=false -reconfigure \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="key=${{ vars.TF_STATE_KEY }}" \
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -backend-config="use_lockfile=true"
 
       - name: Terraform destroy
-        run: terraform destroy -auto-approve -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
+        run: terraform destroy -input=false -auto-approve -var="project_name=${{ vars.TF_VAR_PROJECT_NAME }}" -var="region=${{ vars.TF_VAR_REGION }}" -var="environment=${{ vars.TF_VAR_ENVIRONMENT }}"
