@@ -14,11 +14,11 @@ Inclui:
   entre as zonas de disponibilidade `us-east-1a`, `us-east-1b` e `us-east-1c`;
 - Internet Gateway e roteamento das sub-redes públicas;
 - um NAT Gateway por zona de disponibilidade para saída das sub-redes privadas;
-- configuração de logging do API Gateway na conta;
 - publicação dos IDs da VPC e das sub-redes no SSM Parameter Store.
 
-Não inclui clusters Kubernetes, workloads, serviços compartilhados de
-plataforma ou observabilidade. Esses recursos pertencem aos produtos downstream.
+Não inclui fundação da conta, IAM, configuração global do API Gateway, clusters
+Kubernetes, workloads, serviços compartilhados de plataforma ou observabilidade.
+Esses recursos pertencem ao `infra-bootstrap` ou aos produtos downstream.
 
 ## Arquitetura
 
@@ -74,7 +74,7 @@ operacionais do pipeline.
 
 ## Ownership
 
-Owner: time de Cloud Platform. Mudanças em CIDRs, rotas, NAT Gateways, IAM ou no
+Owner: time de Cloud Platform. Mudanças em CIDRs, rotas, NAT Gateways ou no
 contrato SSM exigem revisão técnica e evidência do Terraform plan.
 
 Licença: MIT.

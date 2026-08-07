@@ -14,7 +14,9 @@ Gateway, Internet Gateway) e publica os IDs criados no **SSM Parameter
 Store**, para que outros repositórios (`infra-cluster`) consumam sem acoplar
 diretamente no state deste repositório.
 
-Este repo **não** cria cluster, nem nada de Kubernetes. Escopo é só rede.
+Este repo **não** cria fundação da conta, IAM, configuração global do API
+Gateway, cluster ou recursos Kubernetes. Escopo é só rede. A fundação global
+pertence ao `infra-bootstrap`.
 
 ## Inventário real de arquivos
 
@@ -30,7 +32,6 @@ Este repo **não** cria cluster, nem nada de Kubernetes. Escopo é só rede.
 | `databases_subnet.tf` | 3 subnets de banco de dados (1a/1b/1c), sem rota própria de saída |
 | `nat_gateway.tf` | 3 EIPs + 3 NAT Gateways (um por AZ) |
 | `internet_gateway.tf` | 1 Internet Gateway |
-| `api_gateway_setup.tf` | IAM role + policy attachment para logging do API Gateway na conta |
 | `parameters_store.tf` | publica VPC ID + todos os subnet IDs no SSM |
 | `output.tf` | outputs dos IDs dos parâmetros SSM criados |
 | `terraform.tfvars.example` | exemplo de valores para as variáveis obrigatórias |
@@ -42,12 +43,13 @@ etc. até que sejam criados.
 ## Variáveis (nomes e tipos exatos)
 
 ```hcl
-variable "project_name" { type = string }  # obrigatória, sem default
-variable "region"       { type = string }  # obrigatória, validada como formato de região AWS
-variable "environment"  { type = string }  # obrigatória, validada: "dev" | "staging" | "prod"
+variable "project_name" { type = string }  # default: "infra-network"
+variable "region"       { type = string }  # default: "us-east-1"
+variable "environment"  { type = string }  # default: "dev"
 ```
 
-Nenhuma outra variável existe neste repositório.
+Nenhuma outra variável existe neste repositório. As três possuem validações
+compatíveis com os valores documentados.
 
 ## Contrato entre repositórios — paths do SSM Parameter Store
 
@@ -86,9 +88,9 @@ achar o parâmetro. Trate esse contrato como uma API pública.
 
 ```hcl
 terraform {
-  required_version = ">= 1.7.0"
+  required_version = ">= 1.11.0"
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.42" }
+    aws = { source = "hashicorp/aws", version = "~> 6.56" }
   }
 }
 ```
@@ -149,9 +151,8 @@ aba Security > Code scanning. Não confunda isso com um bug esquecido.
   no bucket e `s3:ListBucket` no bucket (sem isso a AWS devolve 403 em vez
   de 404 mesmo pra objeto inexistente). Com `use_lockfile = true`, o lock
   fica no próprio S3 junto ao state file — não precisa mais de DynamoDB.
-- ❌ Permissão `apigateway:UPDATE` no resource `/account` — necessária
-  para o `aws_api_gateway_account.main`. Sem isso o apply falha com
-  `AccessDeniedException`.
+- ✅ Configuração global de logging do API Gateway transferida para o
+  `infra-bootstrap`; este produto não requer mais `apigateway:UPDATE`.
 - ✅ **Corrigido nesta sessão**: `required_version` em `versions.tf` e
   `TF_VERSION` no workflow estavam em `1.7.5`/`>= 1.7.0` — versão anterior
   à existência do `use_lockfile` (introduzido no Terraform 1.10,
@@ -185,5 +186,5 @@ histórico de PRs deste repositório.
 - Módulos Terraform reutilizáveis (isso vive em um repo `terraform-modules`
   separado, ainda não criado)
 - Separação por ambiente
-- IAM role de OIDC configurada
+- IAM role de OIDC configurada neste state (ela pertence ao `infra-bootstrap`)
 - Testes automatizados além de `terraform validate`/`tflint`/`trivy`
