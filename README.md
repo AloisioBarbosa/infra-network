@@ -1,11 +1,64 @@
 <!-- BEGIN_TF_DOCS -->
-# Curso de Arquitetura de Containers na AWS - Aula 01 - VPC
+# infra-network
 
-> Exemplos de implementação dos exercícios desenvolvidos na aula sobre criação e planejamento de VPC's de alta disponibilidade para arquiteturas de containers
+Produto de infraestrutura responsável pela rede base na AWS. Provisiona uma
+VPC de alta disponibilidade, sub-redes públicas, privadas e de bancos de dados,
+conectividade de saída e o contrato de integração publicado no AWS Systems
+Manager Parameter Store.
 
-![Arquitetura](/docs/Linuxtips-Containers-AWS-VPC%20Uso.drawio.png)
+## Escopo do produto
 
-![Planejamento](/docs/Linuxtips-Containers-AWS-VPC%20-%20Planejamento.drawio.png)
+Inclui VPC, sub-redes em três zonas de disponibilidade, Internet Gateway, NAT
+Gateway por zona, tabelas de rotas, configuração de logging do API Gateway e
+publicação dos IDs no SSM Parameter Store.
+
+Não inclui cluster Kubernetes, workloads, serviços compartilhados de plataforma
+ou observabilidade.
+
+## Arquitetura
+
+![Topologia da rede AWS](/docs/network-architecture.png)
+
+![Planejamento de endereçamento das sub-redes](/docs/subnet-address-plan.png)
+
+## Dependências e contratos
+
+O [`infra-cluster`](https://github.com/AloisioBarbosa/infra-cluster) consome os
+parâmetros publicados sob `/<project_name>/vpc/`. O valor operacional de
+`project_name` é `infra-network` e deve ser igual nos dois repositórios.
+
+## Uso local
+
+Pré-requisitos: Terraform 1.11 ou superior, credenciais AWS e acesso ao backend
+S3 configurado em `backend.tf`.
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform fmt -check -recursive
+terraform validate
+terraform plan
+```
+
+O arquivo `terraform.tfvars` não deve ser commitado. Consulte
+[`CI-SETUP.md`](CI-SETUP.md) para a configuração do pipeline e suas pendências
+operacionais.
+
+## Operação
+
+- Não execute plans ou applies concorrentes para o mesmo state.
+- Revise substituições e deleções antes de aprovar um apply.
+- Para rollback de código, reverta o commit e gere um novo plan.
+- Não altere o state manualmente sem backup e plano de migração.
+- Preserve os nomes dos parâmetros SSM, pois eles formam o contrato com o
+  `infra-cluster`.
+
+## Ownership
+
+Owner: time de Cloud Platform. Mudanças em CIDRs, rotas, NAT Gateways, IAM ou no
+contrato SSM exigem revisão técnica e evidência do Terraform plan.
+
+Licença: MIT.
 
 ## Requirements
 

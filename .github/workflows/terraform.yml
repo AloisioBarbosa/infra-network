@@ -3,8 +3,16 @@ name: Terraform Pipeline
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - ".github/workflows/terraform.yml"
   push:
     branches: [main]
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - ".github/workflows/terraform.yml"
   workflow_dispatch:
     inputs:
       action:
