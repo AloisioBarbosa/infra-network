@@ -1,12 +1,14 @@
-# Curso de Arquitetura de Containers na AWS - Aula 01 - VPC 
+# Infra Network — Infraestrutura de Rede na AWS
 
-> Exemplos de implementação dos exercícios desenvolvidos na aula sobre criação e planejamento de VPC's de alta disponibilidade para arquiteturas de containers
+Infraestrutura como código para provisionar uma rede AWS altamente disponível,
+distribuída em três zonas de disponibilidade. O projeto mantém subnets públicas,
+privadas e de bancos de dados e publica seus identificadores no AWS Systems
+Manager Parameter Store para integração com outros projetos.
 
-## Arquitetura Inicial
+## Arquitetura
 
-![Arquitetura](/docs/Linuxtips-Containers-AWS-VPC%20Uso.drawio.png)
+![Arquitetura da rede AWS](/docs/infra-network-architecture.png)
 
+## Planejamento de endereçamento
 
-## Planejamento de Tamanho das Subnets
-
-![Planejamento](/docs/Linuxtips-Containers-AWS-VPC%20-%20Planejamento.drawio.png)
+![Planejamento das subnets](/docs/infra-network-subnet-planning.png)
