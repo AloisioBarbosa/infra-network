@@ -35,6 +35,8 @@ pertence ao `infra-bootstrap`.
 | `parameters_store.tf` | publica VPC ID + todos os subnet IDs no SSM |
 | `output.tf` | outputs dos IDs dos parâmetros SSM criados |
 | `terraform.tfvars.example` | exemplo de valores para as variáveis obrigatórias |
+| `.github/workflows/terraform.yml` | pipeline de lint, segurança, plan, apply e destroy com autenticação OIDC |
+| `README.md` | documentação de arquitetura, operação, contrato SSM e CI/CD |
 
 **Não existe** separação de ambiente (dev/staging/prod) — é um único diretório
 flat com um único state. Não assuma a existência de `envs/dev`, `envs/prod`
@@ -57,8 +59,8 @@ Este é o contrato real que `infra-cluster` (e qualquer outro repo) deve
 consumir. O prefixo é sempre `var.project_name`:
 
 **Valor real em uso, definido via GitHub Actions variable
-`TF_VAR_project_name`: `infra-network`.** O `infra-cluster` PRECISA usar
-exatamente o mesmo valor (`TF_VAR_project_name = infra-network` também,
+`TF_VAR_PROJECT_NAME`: `infra-network`.** O `infra-cluster` PRECISA usar
+exatamente o mesmo valor (`TF_VAR_PROJECT_NAME = infra-network` também,
 configurado nele) — não o nome do próprio repositório dele. Se os dois
 repos usarem `project_name` diferentes, os paths do SSM abaixo não batem
 e o `infra-cluster` falha tentando ler um parâmetro inexistente.
@@ -129,28 +131,23 @@ tomada em `main` (commit "não falhar o job se houver vulnerabilidades,
 apenas gerar o relatório"): o scan nunca bloqueia o pipeline, só alimenta a
 aba Security > Code scanning. Não confunda isso com um bug esquecido.
 
-**Status real verificado (última checagem: 06/08/2026):**
+**Status real verificado (última checagem: 11/08/2026):**
 - ✅ Variables `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_KEY` — configuradas e corretas
-- ❌ `TF_LOCK_TABLE` removido — o lock agora usa `use_lockfile` no S3, não DynamoDB
+- ✅ `TF_LOCK_TABLE` removido — o lock agora usa `use_lockfile` no S3, não DynamoDB
 - ✅ Environments `plan` e `production` — existem
 - ⚠️ Environment `production` **sem required reviewer configurado** — a
   aprovação manual antes do apply, que era o objetivo original, não está
   ativa ainda
 - ⚠️ Sobrou um environment `AWS_REGION` (criado por engano numa tentativa
   anterior) — não é usado por nenhum job, pode ser apagado
-- **Autenticação AWS mudou de OIDC para chaves estáticas.** Depois de
-  erros persistentes com `role-to-assume`, o workflow passou a usar
-  `aws-access-key-id`/`aws-secret-access-key` (secrets `AWS_ACCESS_KEY_ID`
-  e `AWS_SECRET_ACCESS_KEY`). O bloco `role-to-assume` original ficou
-  comentado no arquivo, não removido. Se for investigar o CI, confira
-  qual dos dois métodos está de fato ativo antes de assumir.
-- ❌ A policy anexada a essa identidade (IAM user, com as chaves
-  estáticas) cobre EC2/EKS/IAM/SSM/KMS mas **não cobre o backend do
-  Terraform** (bucket S3 do state) — causou um 403 no `terraform init`
-  (`HeadObject` em `orange-ks8-logs`). Precisa de `s3:GetObject`/`PutObject`/`DeleteObject`
-  no bucket e `s3:ListBucket` no bucket (sem isso a AWS devolve 403 em vez
-  de 404 mesmo pra objeto inexistente). Com `use_lockfile = true`, o lock
-  fica no próprio S3 junto ao state file — não precisa mais de DynamoDB.
+- ✅ Autenticação AWS via OIDC usando `AWS_ROLE_ARN`; não são usadas chaves
+  AWS estáticas. A role e o provider OIDC pertencem ao `infra-bootstrap`.
+- ✅ A trust policy autoriza os environments `plan` e `production`.
+- ✅ A policy da role cobre o backend S3, os recursos EC2 de rede e o
+  contrato SSM. `ssm:DescribeParameters` usa `Resource = "*"`, pois essa
+  operação não aceita restrição ao ARN individual dos parâmetros.
+- ✅ Deploy do `infra-network` concluído via pipeline após os ajustes de OIDC
+  e permissões IAM.
 - ✅ Configuração global de logging do API Gateway transferida para o
   `infra-bootstrap`; este produto não requer mais `apigateway:UPDATE`.
 - ✅ **Corrigido nesta sessão**: `required_version` em `versions.tf` e
@@ -160,14 +157,12 @@ aba Security > Code scanning. Não confunda isso com um bug esquecido.
   `Error: Invalid backend configuration argument` no `terraform init`.
   Atualizado para `TF_VERSION: "1.15.8"` (última estável confirmada em
   06/08/2026) e `required_version = ">= 1.11.0"`.
-- ❌ Variáveis `TF_VAR_project_name`, `TF_VAR_region`, `TF_VAR_environment`
-  — valores decididos (`infra-network`, `us-east-1`, `dev`), mas ainda
-  não confirmamos via API se já foram criadas como repository variables
-  (o token não tem permissão de leitura em Variables)
+- ✅ Variáveis `TF_VAR_PROJECT_NAME`, `TF_VAR_REGION`, `TF_VAR_ENVIRONMENT`
+  configuradas com os valores operacionais `infra-network`, `us-east-1` e
+  `dev`, conforme comprovado pelo deploy concluído.
 
-Não assuma que o pipeline completo (lint → security → plan/apply) já
-roda de ponta a ponta com sucesso — confirme o histórico de execuções
-antes de assumir qualquer etapa como resolvida.
+O pipeline já concluiu um deploy de ponta a ponta com OIDC. Para diagnósticos
+futuros, ainda confirme a execução específica no histórico do GitHub Actions.
 
 **Importante sobre o fluxo de trabalho real**: várias mudanças recentes
 neste workflow foram commitadas **direto em `main`**, sem passar por PR
