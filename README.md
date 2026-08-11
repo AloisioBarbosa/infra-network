@@ -1,37 +1,60 @@
-<!-- BEGIN_TF_DOCS -->
 # infra-network
 
-Produto de infraestrutura responsável pela rede base na AWS. Provisiona uma
-VPC de alta disponibilidade, sub-redes públicas, privadas e de bancos de dados,
-conectividade de saída e o contrato de integração publicado no AWS Systems
-Manager Parameter Store.
+Infraestrutura Terraform responsável pela rede base na AWS. Provisiona uma
+VPC de alta disponibilidade em três zonas, conectividade pública e privada e
+publica no AWS Systems Manager Parameter Store os IDs consumidos por outros
+produtos.
 
-## Escopo do produto
+## Escopo
 
-Inclui VPC, sub-redes em três zonas de disponibilidade, Internet Gateway, NAT
-Gateway por zona, tabelas de rotas e publicação dos IDs no SSM Parameter Store.
+Este repositório cria:
 
-Não inclui fundação da conta, backend provisionado, IAM, configuração global do
-API Gateway, cluster Kubernetes, workloads, serviços compartilhados de
-plataforma ou observabilidade. Recursos globais pertencem ao
-[`infra-bootstrap`](https://github.com/AloisioBarbosa/infra-bootstrap).
+- VPC `10.0.0.0/16` com DNS habilitado;
+- três sub-redes públicas, três privadas e três de bancos de dados;
+- Internet Gateway e rota pública;
+- um NAT Gateway por zona e rotas de saída para as sub-redes privadas;
+- parâmetros SSM com os IDs da VPC e de todas as sub-redes.
+
+Fundação da conta, bucket de state, IAM e provedor OIDC pertencem ao
+[`infra-bootstrap`](https://github.com/AloisioBarbosa/infra-bootstrap). Cluster
+Kubernetes e workloads também estão fora deste escopo.
 
 ## Arquitetura
 
-![Topologia da rede AWS](/docs/network-architecture.png)
+![Topologia da rede AWS](docs/network-architecture.png)
 
-![Planejamento de endereçamento das sub-redes](/docs/subnet-address-plan.png)
+![Planejamento de endereçamento](docs/subnet-address-plan.png)
 
-## Dependências e contratos
+## Contrato SSM
 
 O [`infra-cluster`](https://github.com/AloisioBarbosa/infra-cluster) consome os
-parâmetros publicados sob `/<project_name>/vpc/`. O valor operacional de
-`project_name` é `infra-network` e deve ser igual nos dois repositórios.
+parâmetros abaixo. O valor operacional de `project_name` deve permanecer
+`infra-network` nos dois repositórios.
+
+```text
+/infra-network/vpc/vpc_id
+/infra-network/vpc/subnet_private_1a
+/infra-network/vpc/subnet_private_1b
+/infra-network/vpc/subnet_private_1c
+/infra-network/vpc/subnet_public_1a
+/infra-network/vpc/subnet_public_1b
+/infra-network/vpc/subnet_public_1c
+/infra-network/vpc/subnet_databases_1a
+/infra-network/vpc/subnet_databases_1b
+/infra-network/vpc/subnet_databases_1c
+```
+
+Alterar esses nomes é uma mudança de contrato e exige coordenação com os
+repositórios consumidores.
 
 ## Uso local
 
-Pré-requisitos: Terraform 1.11 ou superior, credenciais AWS e acesso ao backend
-S3 configurado em `backend.tf`.
+Pré-requisitos:
+
+- Terraform 1.11 ou superior;
+- credenciais AWS com acesso aos recursos de rede, aos parâmetros SSM e ao
+  state no S3;
+- acesso ao backend configurado em `backend.tf`.
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
@@ -41,105 +64,46 @@ terraform validate
 terraform plan
 ```
 
-O arquivo `terraform.tfvars` não deve ser commitado. Consulte
-[`CI-SETUP.md`](CI-SETUP.md) para a configuração do pipeline e suas pendências
-operacionais.
+O arquivo `terraform.tfvars` é local e não deve ser commitado.
+
+## CI/CD
+
+O workflow `Terraform Pipeline` usa GitHub Actions e autenticação AWS via OIDC,
+sem chaves AWS estáticas:
+
+- `lint`: executa `terraform fmt`, `terraform validate` e TFLint;
+- `trivy-scan`: gera o relatório SARIF sem bloquear o pipeline por achados;
+- `plan`: executa em Pull Requests e manualmente no environment `plan`;
+- `apply`: executa em pushes para `main` e manualmente no environment
+  `production`;
+- `destroy`: somente manual, também no environment `production`.
+
+Variáveis usadas pelo workflow:
+
+| Variável | Finalidade |
+|---|---|
+| `AWS_ROLE_ARN` | Role criada no `infra-bootstrap` e assumida via OIDC |
+| `AWS_REGION` | Região AWS do backend e dos recursos |
+| `TF_STATE_BUCKET` | Bucket S3 compartilhado para o state |
+| `TF_STATE_KEY` | Chave do state deste produto |
+| `TF_VAR_PROJECT_NAME` | Prefixo dos recursos e parâmetros SSM |
+| `TF_VAR_REGION` | Região passada ao Terraform |
+| `TF_VAR_ENVIRONMENT` | Ambiente usado em tags |
+
+A trust policy da role deve autorizar os subjects OIDC dos environments
+`plan` e `production`. A policy de permissões deve cobrir EC2, o prefixo SSM
+`/infra-network/vpc/*`, `ssm:DescribeParameters` com `Resource = "*"` e os
+objetos do state no S3. O lock usa `use_lockfile` no próprio S3; não há tabela
+DynamoDB.
 
 ## Operação
 
-- Não execute plans ou applies concorrentes para o mesmo state.
-- Revise substituições e deleções antes de aprovar um apply.
-- Para rollback de código, reverta o commit e gere um novo plan.
+- Não execute `plan` ou `apply` concorrentes sobre o mesmo state.
+- Revise substituições e exclusões antes de aplicar um plano.
+- Para rollback de código, reverta o commit e gere um novo plano.
 - Não altere o state manualmente sem backup e plano de migração.
-- Preserve os nomes dos parâmetros SSM, pois eles formam o contrato com o
-  `infra-cluster`.
+- Preserve o contrato SSM com os produtos consumidores.
 
-## Ownership
+## Licença
 
-Owner: time de Cloud Platform. Mudanças em CIDRs, rotas, NAT Gateways ou no
-contrato SSM exigem revisão técnica e evidência do Terraform plan.
-
-Licença: MIT.
-
-## Requirements
-
-No requirements.
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 5.42.0 |
-
-## Modules
-
-No modules.
-
-## Resources
-
-| Name | Type |
-|------|------|
-| [aws_eip.vpc_eip_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
-| [aws_eip.vpc_eip_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
-| [aws_eip.vpc_eip_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
-| [aws_internet_gateway.gw](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway) | resource |
-| [aws_nat_gateway.nat_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway) | resource |
-| [aws_nat_gateway.nat_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway) | resource |
-| [aws_nat_gateway.nat_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway) | resource |
-| [aws_route.private_access_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) | resource |
-| [aws_route.private_access_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) | resource |
-| [aws_route.private_access_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) | resource |
-| [aws_route.public_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) | resource |
-| [aws_route_table.private_internet_access_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table) | resource |
-| [aws_route_table.private_internet_access_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table) | resource |
-| [aws_route_table.private_internet_access_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table) | resource |
-| [aws_route_table.public_internet_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table) | resource |
-| [aws_route_table_association.private_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) | resource |
-| [aws_route_table_association.private_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) | resource |
-| [aws_route_table_association.private_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) | resource |
-| [aws_route_table_association.public_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) | resource |
-| [aws_route_table_association.public_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) | resource |
-| [aws_route_table_association.public_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) | resource |
-| [aws_ssm_parameter.databases_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.databases_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.databases_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.private_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.private_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.private_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.public_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.public_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.public_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_subnet.databases_subnet_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.databases_subnet_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.databases_subnet_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.private_subnet_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.private_subnet_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.private_subnet_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.public_subnet_1a](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.public_subnet_1b](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.public_subnet_1c](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_vpc.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc) | resource |
-
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| <a name="input_project_name"></a> [project\_name](#input\_project\_name) | Nome do projet. Essa variável será um prefixo para os recursos criados dentro desse projeto | `any` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | n/a | `string` | `"Região da AWS onde os recursos serão criados"` | no |
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| <a name="output_ssm_subnet_databases_1a"></a> [ssm\_subnet\_databases\_1a](#output\_ssm\_subnet\_databases\_1a) | ID da subnet de bancos de dados na zona de disponibilidade 1a. Este ID é recuperado do AWS Systems Manager Parameter Store e usado para o provisionamento de instâncias de banco de dados nesta zona específica. |
-| <a name="output_ssm_subnet_databases_1b"></a> [ssm\_subnet\_databases\_1b](#output\_ssm\_subnet\_databases\_1b) | ID da subnet de bancos de dados na zona de disponibilidade 1b. Obtido do AWS Systems Manager Parameter Store, é essencial para a alocação de instâncias de banco de dados que precisam ser isoladas nesta zona. |
-| <a name="output_ssm_subnet_databases_1c"></a> [ssm\_subnet\_databases\_1c](#output\_ssm\_subnet\_databases\_1c) | ID da subnet de bancos de dados na zona de disponibilidade 1c, proveniente do AWS Systems Manager Parameter Store. Utilizado no provisionamento de instâncias de banco de dados que requerem isolamento nesta zona. |
-| <a name="output_ssm_subnet_private_1a"></a> [ssm\_subnet\_private\_1a](#output\_ssm\_subnet\_private\_1a) | ID da subnet privada na zona de disponibilidade 1a. Valor armazenado no AWS Systems Manager Parameter Store, utilizado para provisionar recursos em uma subnet privada específica. |
-| <a name="output_ssm_subnet_private_1b"></a> [ssm\_subnet\_private\_1b](#output\_ssm\_subnet\_private\_1b) | ID da subnet privada na zona de disponibilidade 1b. Armazenado no AWS Systems Manager Parameter Store, usado para alocação de recursos que requerem isolamento dentro desta zona de disponibilidade. |
-| <a name="output_ssm_subnet_private_1c"></a> [ssm\_subnet\_private\_1c](#output\_ssm\_subnet\_private\_1c) | ID da subnet privada na zona de disponibilidade 1c. Guardado no AWS Systems Manager Parameter Store, é crucial para a criação de recursos que precisam ser isolados nesta zona específica. |
-| <a name="output_ssm_subnet_public_1a"></a> [ssm\_subnet\_public\_1a](#output\_ssm\_subnet\_public\_1a) | ID da subnet pública na zona de disponibilidade 1a. Este ID, proveniente do AWS Systems Manager Parameter Store, é utilizado para provisionar recursos acessíveis publicamente nesta zona. |
-| <a name="output_ssm_subnet_public_1b"></a> [ssm\_subnet\_public\_1b](#output\_ssm\_subnet\_public\_1b) | ID da subnet pública na zona de disponibilidade 1b. Disponível via AWS Systems Manager Parameter Store, permite a implementação de recursos com acesso público nesta zona específica. |
-| <a name="output_ssm_subnet_public_1c"></a> [ssm\_subnet\_public\_1c](#output\_ssm\_subnet\_public\_1c) | ID da subnet pública na zona de disponibilidade 1c, armazenado no AWS Systems Manager Parameter Store. Usado para configurar recursos que necessitam de acesso público nesta zona. |
-| <a name="output_ssm_vpc_id"></a> [ssm\_vpc\_id](#output\_ssm\_vpc\_id) | ID do VPC armazenado no AWS Systems Manager Parameter Store. Este ID é usado para identificar o VPC onde os recursos serão provisionados. |
-<!-- END_TF_DOCS -->
+[MIT](LICENSE)
