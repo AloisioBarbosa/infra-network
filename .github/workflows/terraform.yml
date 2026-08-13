@@ -89,7 +89,7 @@ jobs:
           exit-code: 0   # Nao falha o job em CRITICAL/HIGH, apenas gera o relatorio SARIF (decisao deliberada)
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()    # Garante o envio do relatório SARIF para o GitHub Security mesmo se o scan falhar
         with:
           sarif_file: trivy.sarif
